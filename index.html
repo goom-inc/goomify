@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#7562bd">
+<meta name="description" content="観るだけじゃない。物語の住民になる。WORLDSは7日間の物語体験のプロトタイプです。">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>WORLDS — 物語の住民になる</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./src/styles.css">
+<script type="module" src="./src/app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#main">本文へスキップ</a>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="modal" aria-labelledby="modal-title"></dialog>
+<noscript><p class="noscript">WORLDSの体験版を使うには、JavaScriptを有効にしてください。実際の課金やログインは行いません。</p></noscript>
+</body>
+</html>

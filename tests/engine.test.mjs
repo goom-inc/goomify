@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { ROLES, DAYS, createGame, submitAction, resolveDay, getEnding, addPost, reportPost, blockAuthor, parseGame, serializeGame, isValidGame } from '../src/engine.mjs';
+const now = '2026-11-04T01:00:00.000Z';
+const start = (role='engineer') => createGame('ハル', role, now);
+function complete(role='engineer', branch=0) { let s=start(role);for(let d=0;d<7;d++)s=resolveDay(submitAction(s,DAYS[d].options[branch].id,now),now);return s; }
+test('create a valid game for every role',()=>{for(const r of ROLES){const s=start(r.id);assert.equal(s.day,1);assert.equal(s.player.role,r.id);assert.ok(isValidGame(s));}});
+test('names are trimmed; invalid names and roles are rejected',()=>{assert.equal(createGame('  ハル  ','engineer',now).player.name,'ハル');for(const name of ['', '   ', 'a'.repeat(21), null])assert.throws(()=>createGame(name,'engineer',now),{code:'NAME'});assert.throws(()=>createGame('ハル','admin',now),{code:'ROLE'});});
+test('Unicode name limits count code points, not UTF-16 units',()=>{assert.ok(createGame('🌱'.repeat(20),'gardener',now));assert.throws(()=>createGame('🌱'.repeat(21),'gardener',now),{code:'NAME'});});
+test('submitting does not mutate input or resolve stats early',()=>{const original=start(),snapshot=structuredClone(original);const next=submitAction(original,'light',now);assert.deepEqual(original,snapshot);assert.deepEqual(next.stats,original.stats);assert.equal(next.choices.length,1);});
+test('duplicate actions are rejected',()=>{const s=submitAction(start(),'light',now);assert.throws(()=>submitAction(s,'garden',now),{code:'DUPLICATE'});});
+test('a choice from another day is rejected',()=>{assert.throws(()=>submitAction(start(),'signal',now),{code:'OPTION'});});
+test('a day cannot resolve without a choice',()=>{assert.throws(()=>resolveDay(start(),now),{code:'NO_ACTION'});});
+test('effects, daily costs and role bonus resolve exactly',()=>{const s=resolveDay(submitAction(start(),'light',now),now);assert.deepEqual(s.stats,{energy:72,food:57,trust:60,safety:60});assert.equal(s.history.length,1);assert.equal(s.day,2);assert.ok(isValidGame(s));});
+test('repeating a resolution cannot advance another day',()=>{const s=resolveDay(submitAction(start(),'light',now),now);assert.throws(()=>resolveDay(s,now),{code:'NO_ACTION'});});
+test('all roles and all 2,187 fixed action paths finish with bounded stats',()=>{for(const role of ROLES){for(let path=0;path<3**7;path++){let s=start(role.id),n=path;for(let day=0;day<7;day++){const index=n%3;n=Math.floor(n/3);s=resolveDay(submitAction(s,DAYS[day].options[index].id,now),now);assert.ok(Object.values(s.stats).every(v=>v>=0&&v<=100));}assert.equal(s.status,'completed');assert.equal(s.history.length,7);assert.ok(getEnding(s)?.title);assert.ok(isValidGame(s));}}});
+test('completed games reject more actions and resolution',()=>{const s=complete();assert.throws(()=>submitAction(s,'memory',now),{code:'ENDED'});assert.throws(()=>resolveDay(s,now),{code:'ENDED'});});
+test('different actions produce distinct recorded states',()=>{assert.notDeepEqual(complete('engineer',0).stats,complete('engineer',2).stats);});
+test('ending is absent before day seven is resolved',()=>{assert.equal(getEnding(start()),null);});
+test('JSON round-trip preserves complete state',()=>{const s=complete();assert.deepEqual(parseGame(serializeGame(s)),s);});
+test('corrupt, oversized or malformed states are not loaded',()=>{for(const input of ['null','{}','[]','{','123','"text"'])assert.equal(parseGame(input),null);for(const change of [s=>s.stats.energy=101,s=>s.day=8,s=>s.player.role='admin',s=>s.status='completed',s=>s.history.push({}),s=>s.reports.push({id:'../bad',at:now}),s=>s.blocked.push('unknown'),s=>s.version=2]){const s=start();change(s);assert.equal(parseGame(JSON.stringify(s)),null);}});
+test('post validation, limits and persistence',()=>{let s=addPost(start(),'  新しい芽が出た。  ',now);assert.equal(s.posts[0].text,'新しい芽が出た。');assert.throws(()=>addPost(s,' ',now),{code:'POST'});assert.throws(()=>addPost(s,'あ'.repeat(281),now),{code:'POST'});for(let i=1;i<50;i++)s=addPost(s,`post ${i}`,now);assert.equal(s.posts.length,50);assert.throws(()=>addPost(s,'51',now),{code:'POST_LIMIT'});assert.ok(isValidGame(s));});
+test('HTML is kept as text in state for context-aware escaping by UI',()=>{const s=addPost(start(),'<img src=x onerror=alert(1)>',now);assert.equal(s.posts[0].text,'<img src=x onerror=alert(1)>');});
+test('reporting is idempotent and local-only',()=>{const s=reportPost(start(),'sample-1',now);assert.deepEqual(reportPost(s,'sample-1',now),s);assert.equal(s.reports.length,1);assert.throws(()=>reportPost(s,'<script>',now),{code:'REPORT'});});
+test('sample residents can be blocked only once',()=>{const s=blockAuthor(start(),'ミオ');assert.deepEqual(blockAuthor(s,'ミオ'),s);assert.throws(()=>blockAuthor(s,'admin'),{code:'BLOCK'});});
+test('invalid history/choice relationships are rejected',()=>{const s=resolveDay(submitAction(start(),'light',now),now);s.choices=[];assert.equal(isValidGame(s),false);const other=start();other.choices=[{day:1,optionId:'light',at:now},{day:1,optionId:'garden',at:now}];assert.equal(isValidGame(other),false);});
